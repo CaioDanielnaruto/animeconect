@@ -21,7 +21,6 @@ create table public.profiles (
 
 create table public.venues (
   id uuid primary key default gen_random_uuid(),
-  created_by uuid references public.profiles(id) on delete set null default auth.uid(),
   name text not null,
   address_line text not null,
   address_number text,
@@ -95,13 +94,11 @@ begin
   values (
     new.id,
     coalesce(new.raw_user_meta_data ->> 'username', 'user_' || substr(new.id::text, 1, 8)),
-    coalesce(new.raw_user_meta_data ->> 'display_name', 'Novo usuário')
+    coalesce(new.raw_user_meta_data ->> 'display_name', 'Novo usuÃ¡rio')
   );
   return new;
 end;
 $$;
-
-revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
 create trigger on_auth_user_created
 after insert on auth.users
@@ -112,16 +109,15 @@ alter table public.venues enable row level security;
 alter table public.events enable row level security;
 alter table public.event_participants enable row level security;
 
-create policy "Perfis são públicos" on public.profiles for select using (true);
-create policy "Usuário atualiza o próprio perfil" on public.profiles
+create policy "Perfis sÃ£o pÃºblicos" on public.profiles for select using (true);
+create policy "UsuÃ¡rio atualiza o prÃ³prio perfil" on public.profiles
 for update to authenticated using ((select auth.uid()) = id) with check ((select auth.uid()) = id);
 
-create policy "Locais são públicos" on public.venues for select using (true);
-create policy "Usuário autenticado cadastra o próprio local" on public.venues
-for insert to authenticated
-with check (created_by = (select auth.uid()));
+create policy "Locais sÃ£o pÃºblicos" on public.venues for select using (true);
+create policy "UsuÃ¡rio autenticado cadastra local" on public.venues
+for insert to authenticated with check (true);
 
-create policy "Eventos publicados são públicos" on public.events
+create policy "Eventos publicados sÃ£o pÃºblicos" on public.events
 for select using (status = 'published' or organizer_id = (select auth.uid()));
 create policy "Organizador cria eventos" on public.events
 for insert to authenticated with check (organizer_id = (select auth.uid()));
@@ -130,13 +126,13 @@ for update to authenticated using (organizer_id = (select auth.uid())) with chec
 create policy "Organizador exclui eventos" on public.events
 for delete to authenticated using (organizer_id = (select auth.uid()));
 
-create policy "Participações são visíveis" on public.event_participants
+create policy "ParticipaÃ§Ãµes sÃ£o visÃ­veis" on public.event_participants
 for select using (true);
-create policy "Usuário registra a própria participação" on public.event_participants
+create policy "UsuÃ¡rio registra a prÃ³pria participaÃ§Ã£o" on public.event_participants
 for insert to authenticated with check (user_id = (select auth.uid()));
-create policy "Usuário atualiza a própria participação" on public.event_participants
+create policy "UsuÃ¡rio atualiza a prÃ³pria participaÃ§Ã£o" on public.event_participants
 for update to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
-create policy "Usuário remove a própria participação" on public.event_participants
+create policy "UsuÃ¡rio remove a prÃ³pria participaÃ§Ã£o" on public.event_participants
 for delete to authenticated using (user_id = (select auth.uid()));
 
 create or replace view public.event_details
@@ -159,3 +155,95 @@ from public.events e
 left join public.venues v on v.id = e.venue_id
 left join public.event_participants ep on ep.event_id = e.id
 group by e.id, v.id;
+
+
+-- Próxima etapa do schema
+
+-- Restringe a execuÃ§Ã£o direta da funÃ§Ã£o usada exclusivamente pelo trigger de autenticaÃ§Ã£o.
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+
+-- Associa novos locais ao usuÃ¡rio que os cadastrou.
+alter table public.venues
+  add column if not exists created_by uuid
+  references public.profiles(id) on delete set null
+  default auth.uid();
+
+drop policy if exists "UsuÃ¡rio autenticado cadastra local" on public.venues;
+
+create policy "UsuÃ¡rio autenticado cadastra o prÃ³prio local"
+on public.venues
+for insert
+to authenticated
+with check (created_by = (select auth.uid()));
+
+
+-- Próxima etapa do schema
+
+create table if not exists public.communities (
+  id uuid primary key default gen_random_uuid(),
+  slug text unique not null,
+  name text unique not null,
+  icon text not null default 'âœ¨',
+  description text not null,
+  member_count integer not null default 0 check (member_count >= 0),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.community_members (
+  community_id uuid not null references public.communities(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (community_id, user_id)
+);
+
+create index if not exists community_members_user_id_idx on public.community_members(user_id);
+
+alter table public.communities enable row level security;
+alter table public.community_members enable row level security;
+
+create policy "Comunidades sÃ£o pÃºblicas" on public.communities for select using (true);
+create policy "Membros sÃ£o pÃºblicos" on public.community_members for select using (true);
+create policy "UsuÃ¡rio entra em comunidade" on public.community_members
+for insert to authenticated with check (user_id = (select auth.uid()));
+create policy "UsuÃ¡rio sai de comunidade" on public.community_members
+for delete to authenticated using (user_id = (select auth.uid()));
+
+insert into public.communities (id, slug, name, icon, description, member_count) values
+  ('10000000-0000-0000-0000-000000000001', 'shonen-brasil', 'Shonen Brasil', 'âš”ï¸', 'Teorias, lutas e lanÃ§amentos semanais.', 24800),
+  ('10000000-0000-0000-0000-000000000002', 'cosplay-creators', 'Cosplay Creators', 'ðŸŒ¸', 'Crie, compartilhe e evolua seu cosplay.', 18200),
+  ('10000000-0000-0000-0000-000000000003', 'gamers-otaku', 'Gamers Otaku', 'ðŸŽ®', 'Do gacha ao competitivo, jogamos juntos.', 31400)
+on conflict (id) do update set
+  slug = excluded.slug,
+  name = excluded.name,
+  icon = excluded.icon,
+  description = excluded.description;
+
+
+-- Próxima etapa do schema
+
+create or replace function public.sync_community_member_count()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if tg_op = 'INSERT' then
+    update public.communities
+    set member_count = member_count + 1
+    where id = new.community_id;
+    return new;
+  end if;
+
+  update public.communities
+  set member_count = greatest(member_count - 1, 0)
+  where id = old.community_id;
+  return old;
+end;
+$$;
+
+revoke execute on function public.sync_community_member_count() from public, anon, authenticated;
+
+create trigger community_members_sync_count
+after insert or delete on public.community_members
+for each row execute function public.sync_community_member_count();
