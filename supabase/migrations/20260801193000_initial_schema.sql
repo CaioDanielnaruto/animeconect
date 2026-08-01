@@ -21,7 +21,6 @@ create table public.profiles (
 
 create table public.venues (
   id uuid primary key default gen_random_uuid(),
-  created_by uuid references public.profiles(id) on delete set null default auth.uid(),
   name text not null,
   address_line text not null,
   address_number text,
@@ -101,8 +100,6 @@ begin
 end;
 $$;
 
-revoke execute on function public.handle_new_user() from public, anon, authenticated;
-
 create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.handle_new_user();
@@ -117,9 +114,8 @@ create policy "Usuário atualiza o próprio perfil" on public.profiles
 for update to authenticated using ((select auth.uid()) = id) with check ((select auth.uid()) = id);
 
 create policy "Locais são públicos" on public.venues for select using (true);
-create policy "Usuário autenticado cadastra o próprio local" on public.venues
-for insert to authenticated
-with check (created_by = (select auth.uid()));
+create policy "Usuário autenticado cadastra local" on public.venues
+for insert to authenticated with check (true);
 
 create policy "Eventos publicados são públicos" on public.events
 for select using (status = 'published' or organizer_id = (select auth.uid()));
