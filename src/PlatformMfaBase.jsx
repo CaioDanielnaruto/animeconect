@@ -11,7 +11,8 @@ export default function Platform(){
   const checkMfa=async(currentSession)=>{
     if(!currentSession){setRequired(false);return}
     const [levels,roles]=await Promise.all([supabase.auth.mfa.getAuthenticatorAssuranceLevel(),supabase.from('user_roles').select('role').eq('user_id',currentSession.user.id).maybeSingle()])
-    setRequired(roles.data?.role==='admin'&&levels.data?.nextLevel==='aal2'&&levels.data?.currentLevel!=='aal2')
+    const privileged=['owner','admin'].includes(roles.data?.role)
+    setRequired(privileged&&levels.data?.nextLevel==='aal2'&&levels.data?.currentLevel!=='aal2')
   }
   useEffect(()=>{
     if(!isSupabaseConfigured)return undefined
