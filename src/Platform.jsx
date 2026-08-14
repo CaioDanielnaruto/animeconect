@@ -1,5 +1,6 @@
 import { useEffect,useState } from 'react'
 import './OwnerPanel.css'
+import './AccountNotice.css'
 import PlatformRoleGateBase from './PlatformRoleGateBase'
 import OwnerPanel from './components/OwnerPanel'
 import { isSupabaseConfigured,supabase } from './lib/supabase'
@@ -7,13 +8,18 @@ import { isSupabaseConfigured,supabase } from './lib/supabase'
 export default function Platform(){
   const [session,setSession]=useState(null)
   const [owner,setOwner]=useState(false)
+  const [standardAccount,setStandardAccount]=useState(false)
+  const [showAccountNotice,setShowAccountNotice]=useState(false)
   const [open,setOpen]=useState(false)
   const [quickMenuOpen,setQuickMenuOpen]=useState(false)
   const check=async(current)=>{
-    if(!current?.user){setSession(null);setOwner(false);return}
+    if(!current?.user){setSession(null);setOwner(false);setStandardAccount(false);setShowAccountNotice(false);return}
     setSession(current)
     const {data}=await supabase.from('user_roles').select('role').eq('user_id',current.user.id).maybeSingle()
+    const privileged=['owner','admin'].includes(data?.role)
     setOwner(data?.role==='owner')
+    setStandardAccount(!privileged)
+    setShowAccountNotice(!privileged)
   }
   useEffect(()=>{
     if(!isSupabaseConfigured)return undefined
@@ -31,6 +37,7 @@ export default function Platform(){
   }
   return <>
     <PlatformRoleGateBase/>
+    {session?.user&&standardAccount&&showAccountNotice&&<aside className="standard-account-notice" role="status"><span>Esta conta é para participar dos grupos e eventos. As funções administrativas são exclusivas para administradores.</span><button aria-label="Fechar aviso" onClick={()=>setShowAccountNotice(false)}>×</button></aside>}
     {session?.user&&<>
       {quickMenuOpen&&<button className="quick-menu-backdrop" aria-label="Fechar acessos rápidos" onClick={()=>setQuickMenuOpen(false)}/>}
       <section className="quick-menu-surface" aria-label="Acessos rápidos" aria-hidden={!quickMenuOpen}>

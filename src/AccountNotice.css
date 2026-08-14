@@ -1,0 +1,2 @@
+.standard-account-notice{position:fixed;z-index:95;top:18px;left:50%;width:min(620px,calc(100% - 28px));display:flex;align-items:center;gap:14px;transform:translateX(-50%);padding:13px 16px;border:1px solid rgba(34,211,238,.5);border-radius:12px;background:rgba(9,9,22,.96);box-shadow:0 16px 45px #000a;color:#dffaff;font-size:14px;line-height:1.45;backdrop-filter:blur(12px)}
+.standard-account-notice span{flex:1}.standard-account-notice button{border:0;background:transparent;color:#fff;font-size:22px;line-height:1;cursor:pointer}
