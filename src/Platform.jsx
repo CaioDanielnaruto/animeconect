@@ -7,17 +7,13 @@ import { isSupabaseConfigured,supabase } from './lib/supabase'
 export default function Platform(){
   const [session,setSession]=useState(null)
   const [owner,setOwner]=useState(false)
-  const [authorized,setAuthorized]=useState(true)
   const [open,setOpen]=useState(false)
   const [quickMenuOpen,setQuickMenuOpen]=useState(false)
   const check=async(current)=>{
-    if(!current?.user){setSession(null);setOwner(false);setAuthorized(true);return}
+    if(!current?.user){setSession(null);setOwner(false);return}
     setSession(current)
-    const [roleResult,accessResult]=await Promise.all([
-      supabase.from('user_roles').select('role').eq('user_id',current.user.id).maybeSingle(),
-      supabase.rpc('has_active_access'),
-    ])
-    setOwner(roleResult.data?.role==='owner');setAuthorized(accessResult.data!==false)
+    const {data}=await supabase.from('user_roles').select('role').eq('user_id',current.user.id).maybeSingle()
+    setOwner(data?.role==='owner')
   }
   useEffect(()=>{
     if(!isSupabaseConfigured)return undefined
@@ -33,7 +29,6 @@ export default function Platform(){
     setQuickMenuOpen(false)
     document.querySelector(selector)?.click()
   }
-  if(session&&!authorized)return <main className="access-denied"><section><span>🔒</span><h1>Acesso não autorizado</h1><p>Este Gmail não está na lista aprovada pelo Criador do AnimeConect.</p><button className="primary" onClick={()=>supabase.auth.signOut()}>Sair da conta</button></section></main>
   return <>
     <PlatformRoleGateBase/>
     {session?.user&&<>
