@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import './SocialSettings.css'
 import { friendlyError } from './lib/formatters'
 import { supabase } from './lib/supabase'
 
-const tabs = [['feed','Feed'],['friends','Amizades'],['chat','Chat'],['notifications','Notificações'],['admin','Admin']]
+const tabs = [['feed','Feed'],['friends','Amizades'],['chat','Chat'],['notifications','Notificações'],['settings','Perfil e configurações'],['admin','Admin']]
+const blankProfile = { username: '', display_name: '', avatar_url: '', bio: '', city: '', state: '', favorite_animes: [] }
 
 export default function SocialHub({ user, onBack }) {
   const [tab, setTab] = useState('feed')
@@ -17,6 +19,8 @@ export default function SocialHub({ user, onBack }) {
   const [message, setMessage] = useState('')
   const [notifications, setNotifications] = useState([])
   const [isAdmin, setIsAdmin] = useState(false)
+  const [profileForm, setProfileForm] = useState(blankProfile)
+  const [accent, setAccent] = useState(() => localStorage.getItem('animeconect-accent') || 'cyan')
   const [stats, setStats] = useState({ users: 0, posts: 0, events: 0 })
   const [notice, setNotice] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -59,8 +63,16 @@ export default function SocialHub({ user, onBack }) {
     ])
     setStats({ users: users.count || 0, posts: postCount.count || 0, events: events.count || 0 })
   }
+  const loadSettings = async () => {
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+    showError(error); if (data) setProfileForm(data)
+  }
 
-  useEffect(() => { loadPosts(); loadFriends(); loadConversations(); loadNotifications(); loadAdmin() }, [])
+  useEffect(() => { loadPosts(); loadFriends(); loadConversations(); loadNotifications(); loadAdmin(); loadSettings() }, [])
+  useEffect(() => {
+    document.documentElement.dataset.accent = accent
+    localStorage.setItem('animeconect-accent', accent)
+  }, [accent])
   useEffect(() => {
     if (!conversation) return undefined
     supabase.from('messages').select('*,profiles:sender_id(display_name,username)').eq('conversation_id', conversation).order('created_at').then(({ data, error }) => { showError(error); setMessages(data || []) })
@@ -85,15 +97,26 @@ export default function SocialHub({ user, onBack }) {
   const sendMessage = async (event) => { event.preventDefault(); if (!message.trim() || !conversation) return; const { error } = await supabase.from('messages').insert({ conversation_id: conversation, sender_id: user.id, content: message.trim() }); if (error) return showError(error); setMessage('') }
   const readAll = async () => { const { error } = await supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('user_id', user.id).is('read_at', null); if (error) return showError(error); loadNotifications() }
   const removePost = async (id) => { const { error } = await supabase.from('posts').delete().eq('id', id); if (error) return showError(error); loadPosts(); loadAdmin() }
+  const saveSettings = async (event) => {
+    event.preventDefault()
+    const favoriteAnimes = Array.isArray(profileForm.favorite_animes) ? profileForm.favorite_animes : profileForm.favorite_animes.split(',').map((item) => item.trim()).filter(Boolean)
+    const payload = { ...profileForm, username: profileForm.username.trim().toLowerCase(), display_name: profileForm.display_name.trim(), state: profileForm.state?.trim().toUpperCase() || null, favorite_animes: favoriteAnimes }
+    setBusy(true)
+    const { data, error } = await supabase.from('profiles').update(payload).eq('id', user.id).select().single()
+    setBusy(false)
+    if (error) return showError(error)
+    setProfileForm(data); setNotice({ type: 'success', text: 'Perfil e preferências salvos!' }); loadPosts()
+  }
 
   return <main className="social-page">
     <header className="social-header shell"><button className="secondary" onClick={onBack}>← Voltar ao início</button><div className="brand"><span className="brand-mark">A</span><span>ANIME<span>CONECT</span></span></div><span className="user-chip">Rede de fãs</span></header>
-    <div className="social-layout shell"><aside className="social-tabs">{tabs.map(([id,label]) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>{label}{id === 'notifications' && notifications.some((item) => !item.read_at) ? ' ●' : ''}</button>)}</aside>
+    <div className="social-layout shell"><aside className="social-tabs">{tabs.filter(([id]) => id !== 'admin' || isAdmin).map(([id,label]) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>{label}{id === 'notifications' && notifications.some((item) => !item.read_at) ? ' ●' : ''}</button>)}</aside>
       <section className="social-content">
         {tab === 'feed' && <><div className="panel"><span className="kicker">COMUNIDADE</span><h1 className="page-title">Feed</h1><form className="composer" onSubmit={createPost}><textarea maxLength="2000" value={postText} onChange={(event) => setPostText(event.target.value)} placeholder="Compartilhe uma teoria, indicação ou momento otaku..."/><button className="primary" disabled={busy}>Publicar</button></form></div><div className="post-list">{posts.map((post) => <article className="panel post" key={post.id}><div className="post-author"><div className="avatar">{post.avatar_url ? <img src={post.avatar_url} alt=""/> : (post.display_name || 'A')[0]}</div><div><strong>{post.display_name}</strong><small>@{post.username} · {new Date(post.created_at).toLocaleDateString('pt-BR')}</small></div>{(post.author_id === user.id || isAdmin) && <button className="danger-link" onClick={() => removePost(post.id)}>Excluir</button>}</div><p>{post.content}</p>{post.image_url && <img className="post-image" src={post.image_url} alt="Conteúdo da publicação"/>}<button className={liked.includes(post.id) ? 'like active' : 'like'} onClick={() => toggleLike(post)}>♥ {post.like_count || 0}</button></article>)}</div></>}
         {tab === 'friends' && <><div className="panel"><span className="kicker">NAKAMAS</span><h1 className="page-title">Pessoas</h1></div><div className="people-grid">{profiles.map((person) => { const relation = friendshipWith(person.id); const incoming = relation?.status === 'pending' && relation.addressee_id === user.id; return <article className="panel person" key={person.id}><div className="avatar large">{person.avatar_url ? <img src={person.avatar_url} alt=""/> : (person.display_name || 'A')[0]}</div><h3>{person.display_name}</h3><p>@{person.username}{person.city ? ` · ${person.city}/${person.state}` : ''}</p>{!relation && <button className="primary small" onClick={() => requestFriend(person.id)}>Adicionar</button>}{incoming && <button className="primary small" onClick={() => acceptFriend(relation)}>Aceitar amizade</button>}{relation?.status === 'pending' && !incoming && <span className="status-chip">Pedido enviado</span>}{relation?.status === 'accepted' && <button className="secondary" onClick={() => openChat(person.id)}>Conversar</button>}</article> })}</div></>}
         {tab === 'chat' && <div className="chat-layout"><aside className="panel conversation-list"><h2>Conversas</h2>{conversations.map((item) => <button className={conversation === item.conversation_id ? 'active' : ''} key={item.conversation_id} onClick={() => setConversation(item.conversation_id)}>{item.profiles?.display_name || item.profiles?.username}</button>)}</aside><div className="panel chat-box">{conversation ? <><div className="messages">{messages.map((item) => <div className={item.sender_id === user.id ? 'message mine' : 'message'} key={item.id}><strong>{item.profiles?.display_name || (item.sender_id === user.id ? 'Você' : 'Nakama')}</strong><p>{item.content}</p></div>)}</div><form className="message-form" onSubmit={sendMessage}><input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Escreva uma mensagem..."/><button className="primary">Enviar</button></form></> : <div className="empty-state">Escolha um amigo e inicie uma conversa.</div>}</div></div>}
         {tab === 'notifications' && <><div className="panel title-row"><div><span className="kicker">ATUALIZAÇÕES</span><h1 className="page-title">Notificações</h1></div><button className="secondary" onClick={readAll}>Marcar como lidas</button></div>{notifications.map((item) => <article className={`panel notification ${item.read_at ? '' : 'unread'}`} key={item.id}><strong>{item.title}</strong><p>{item.body}</p><small>{new Date(item.created_at).toLocaleString('pt-BR')}</small></article>)}</>}
+        {tab === 'settings' && <div className="panel social-settings"><span className="kicker">SUA CONTA</span><h1 className="page-title">Perfil e configurações</h1><form onSubmit={saveSettings}><div className="settings-profile-preview"><div className="avatar large">{profileForm.avatar_url ? <img src={profileForm.avatar_url} alt="Avatar do perfil"/> : (profileForm.display_name || 'A')[0]}</div><div><strong>{profileForm.display_name || 'Seu nome'}</strong><small>@{profileForm.username || 'usuario'}</small></div></div><div className="settings-grid"><label>Nome de usuário<input required minLength="3" maxLength="30" value={profileForm.username || ''} onChange={(event) => setProfileForm({ ...profileForm, username: event.target.value })}/></label><label>Nome exibido<input required minLength="2" maxLength="80" value={profileForm.display_name || ''} onChange={(event) => setProfileForm({ ...profileForm, display_name: event.target.value })}/></label></div><label>URL do avatar<input type="url" value={profileForm.avatar_url || ''} onChange={(event) => setProfileForm({ ...profileForm, avatar_url: event.target.value })}/></label><label>Bio<textarea maxLength="500" value={profileForm.bio || ''} onChange={(event) => setProfileForm({ ...profileForm, bio: event.target.value })}/></label><div className="settings-grid"><label>Cidade<input value={profileForm.city || ''} onChange={(event) => setProfileForm({ ...profileForm, city: event.target.value })}/></label><label>UF<input maxLength="2" value={profileForm.state || ''} onChange={(event) => setProfileForm({ ...profileForm, state: event.target.value })}/></label></div><label>Animes favoritos <small>separe por vírgulas</small><input value={Array.isArray(profileForm.favorite_animes) ? profileForm.favorite_animes.join(', ') : profileForm.favorite_animes || ''} onChange={(event) => setProfileForm({ ...profileForm, favorite_animes: event.target.value })}/></label><fieldset><legend>Cor de destaque</legend><div className="accent-options">{[['cyan','Ciano'],['purple','Roxo'],['pink','Rosa']].map(([value,label]) => <button type="button" className={accent === value ? `active ${value}` : value} onClick={() => setAccent(value)} key={value}>{label}</button>)}</div></fieldset><button className="primary" disabled={busy}>{busy ? 'Salvando...' : 'Salvar configurações'}</button></form></div>}
         {tab === 'admin' && <>{isAdmin ? <><div className="panel"><span className="kicker">ADMINISTRAÇÃO</span><h1 className="page-title">Visão geral</h1><div className="admin-stats"><div><strong>{stats.users}</strong><span>usuários</span></div><div><strong>{stats.posts}</strong><span>posts</span></div><div><strong>{stats.events}</strong><span>eventos</span></div></div></div><div className="panel"><h2>Moderação recente</h2><p>Use o botão “Excluir” no feed para remover publicações que violem as regras.</p></div></> : <div className="panel empty-state">Esta área é exclusiva para administradores.</div>}</>}
       </section>
     </div>{notice && <div className={`toast ${notice.type}`}><span>{notice.text}</span><button onClick={() => setNotice(null)}>×</button></div>}
