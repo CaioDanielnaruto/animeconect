@@ -3,7 +3,9 @@ import './App.css'
 import './Platform.css'
 import EventCard from './components/EventCard'
 import Modal from './components/Modal'
+import { dailyQuotes, getDailyQuote } from './data/dailyQuotes'
 import { dateTimeFormatter, friendlyError, numberFormatter, slugify } from './lib/formatters'
+import { getCharacterImage } from './lib/jikan'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 
 const demoEvents = [
@@ -38,8 +40,9 @@ export default function Platform() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('Todas')
-  const [rengokuImage, setRengokuImage] = useState('')
+  const [characterImage, setCharacterImage] = useState('')
   const [themeImages, setThemeImages] = useState([])
+  const dailyQuote = getDailyQuote(dailyQuotes)
   const user = session?.user
   const displayName = profile.display_name || user?.user_metadata?.display_name || user?.email?.split('@')[0]
   const notify = (type, text) => setNotice({ type, text })
@@ -50,12 +53,17 @@ export default function Platform() {
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('Falha ao carregar temas')))
       .then(({ data }) => setThemeImages((data || []).map((anime) => ({ title: anime.title, url: anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url })).filter((image) => image.url)))
       .catch((error) => { if (error.name !== 'AbortError') setThemeImages([]) })
-    fetch('https://api.jikan.moe/v4/characters?q=Kyojuro%20Rengoku&limit=1', { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Falha ao carregar personagem')))
-      .then(({ data }) => setRengokuImage(data?.[0]?.images?.jpg?.image_url || ''))
-      .catch((error) => { if (error.name !== 'AbortError') setRengokuImage('') })
     return () => controller.abort()
   }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setCharacterImage('')
+    getCharacterImage(dailyQuote.character, { signal: controller.signal })
+      .then(setCharacterImage)
+      .catch((error) => { if (error.name !== 'AbortError') setCharacterImage('') })
+    return () => controller.abort()
+  }, [dailyQuote.character])
 
   const requireUser = () => {
     if (user) return true
@@ -162,7 +170,14 @@ export default function Platform() {
 
   return <main>
     <nav className="nav shell"><a className="brand" href="#inicio"><span className="brand-mark">A</span><span>ANIME<span>CONECT</span></span></a><button className="menu-button" onClick={() => setMenuOpen(!menuOpen)} aria-label="Abrir menu">☰</button><div className={`nav-links ${menuOpen ? 'open' : ''}`}><a href="#eventos">Eventos</a><a href="#comunidades">Comunidades</a><a href="#sobre">Sobre</a>{authReady && user ? <><button className="login user-chip" onClick={() => setModal('profile')}>Olá, {displayName}</button><button className="primary small" onClick={() => setModal('create')}>Criar evento</button><button className="login" onClick={() => supabase.auth.signOut()}>Sair</button></> : <><button className="login" onClick={() => setAuthMode('login')}>Entrar</button><button className="primary small" onClick={() => setAuthMode('signup')}>Criar conta</button></>}</div></nav>
-    <section className="hero-section" id="inicio"><div className="grid-glow"/><div className="hero-content shell"><div className="rengoku-portrait" aria-label="Kyojuro Rengoku">{rengokuImage ? <img src={rengokuImage} alt="Kyojuro Rengoku, o Hashira das Chamas" /> : <span aria-hidden="true">🔥</span>}</div><blockquote className="hero-quote"><p>“Se estiver se sentindo desmotivado ou sentindo que não é bom o suficiente, incendeie o seu coração. Enxugue as lágrimas e siga em frente. Quando se entristecer ou se acovardar, lembre-se de que o fluxo do tempo nunca para; ele não vai esperar enquanto você se afoga em tristeza. Eu não quero que fique angustiado com a minha partida. Não se esqueça de que eu sou um Hashira e que vou proteger vocês onde eu estiver. Os novos botões precisam desabrochar. Qualquer outro Hashira pensaria da mesma forma.”</p><cite>— Kyojuro Rengoku, o Hashira das Chamas</cite></blockquote><h1>Conecte-se com quem vive a mesma <em>paixão.</em></h1><p className="hero-copy">Descubra eventos, encontre sua tribo e compartilhe a cultura que você ama.</p><div className="hero-actions"><button className="primary" onClick={() => user ? document.querySelector('#eventos')?.scrollIntoView() : setAuthMode('signup')}>{user ? 'Explorar eventos' : 'Entrar para a comunidade'} →</button><a className="secondary" href="#comunidades">Ver comunidades</a></div></div><div className="orb orb-one"/><div className="orb orb-two"/></section>
+    <section className="hero-section" id="inicio">
+      <div className="grid-glow"/>
+      <div className="hero-content shell"><div className="rengoku-portrait" aria-label={dailyQuote.character}>{characterImage ? <img src={characterImage} alt={dailyQuote.character} /> : <span aria-hidden="true">🔥</span>}</div>
+        <blockquote className="hero-quote">
+          <p>“{dailyQuote.quote}”</p>
+          <cite>— {[dailyQuote.character, dailyQuote.role].filter(Boolean).join(', ')}</cite>
+        </blockquote>
+        <h1>Conecte-se com quem vive a mesma <em>paixão.</em></h1><p className="hero-copy">Descubra eventos, encontre sua tribo e compartilhe a cultura que você ama.</p><div className="hero-actions"><button className="primary" onClick={() => user ? document.querySelector('#eventos')?.scrollIntoView() : setAuthMode('signup')}>{user ? 'Explorar eventos' : 'Entrar para a comunidade'} →</button><a className="secondary" href="#comunidades">Ver comunidades</a></div></div><div className="orb orb-one"/><div className="orb orb-two"/></section>
     <section className="section shell" id="eventos"><div className="section-heading"><div><span className="kicker">AGENDA ANIMECONECT</span><h2>Encontre seu próximo evento</h2></div>{user && <button className="secondary" onClick={() => setModal('create')}>+ Criar evento</button>}</div><div className="filters"><input aria-label="Buscar eventos" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar evento, cidade ou estado..."/><select value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select></div>{events[0]?.id?.startsWith('demo-') && <p className="demo-note">Eventos de demonstração — publique o primeiro evento para substituir esta lista.</p>}<div className="event-grid">{filteredEvents.map((item, index) => <EventCard event={{ ...item, cover_url: item.cover_url || themeImages[index % Math.max(themeImages.length, 1)]?.url }} onOpen={(chosen) => { setSelectedEvent(chosen); setModal('event') }} key={item.id}/>)}</div>{!filteredEvents.length && <div className="empty-state">Nenhum evento encontrado.</div>}</section>
     <section className="communities" id="comunidades"><div className="shell"><div className="section-heading"><div><span className="kicker">ENCONTRE SUA TRIBO</span><h2>Comunidades populares</h2></div></div><div className="community-grid">{communities.map((item, index) => <article className="community-card" key={item.id}><div className="community-icon">{themeImages[index + 3]?.url ? <img src={themeImages[index + 3].url} alt={themeImages[index + 3].title || item.name} /> : item.icon}</div><div className="community-text"><h3>{item.name}</h3><span>{numberFormatter.format(Number(item.member_count || 0))} membros</span><p>{item.description}</p></div><button disabled={busy} className={joined.includes(item.id) ? 'joined' : ''} onClick={() => toggleCommunity(item)}>{joined.includes(item.id) ? 'Participando ✓' : 'Participar'}</button></article>)}</div></div></section>
     <section className="cta shell" id="sobre">{themeImages[6]?.url ? <img className="cta-image" src={themeImages[6].url} alt={themeImages[6].title || 'Anime em destaque'} /> : <span className="cta-symbol">愛</span>}<div><span className="kicker">FEITO PARA FÃS, POR FÃS</span><h2>Seu próximo nakama está a um clique.</h2><p>Personalize seu perfil, participe de eventos e encontre sua comunidade.</p></div><button className="primary" onClick={() => user ? setModal('profile') : setAuthMode('signup')}>{user ? 'Editar meu perfil →' : 'Criar meu perfil grátis →'}</button></section>
