@@ -1,0 +1,10 @@
+{
+  "name": "AnimeConect",
+  "short_name": "AnimeConect",
+  "description": "Eventos e comunidade para fãs de anime.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#060611",
+  "theme_color": "#060611",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

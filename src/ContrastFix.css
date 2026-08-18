@@ -1,0 +1,32 @@
+button.secondary,a.secondary,.social-header button.secondary{
+  color:#f8fafc;
+  background:rgba(255,255,255,.07);
+  border-color:rgba(255,255,255,.22);
+  text-shadow:0 1px 2px rgba(0,0,0,.7);
+}
+button.secondary:hover,a.secondary:hover,.social-header button.secondary:hover{
+  color:#fff;
+  background:rgba(34,211,238,.12);
+  border-color:rgba(34,211,238,.55);
+}
+button.login,.auth-switch,.modal-close,.messenger-window>header button,.safety-window>header button,.mfa-window>header button{
+  color:#fff;
+}
+.nav-links a,.footer-inner,.event-info h3,.community-text h3,.panel h1,.panel h2,.panel h3{
+  color:#f5f7ff;
+}
+.event-info p,.community-card p,.panel p,.messenger-title small,.conversation-list button,.social-tabs button{
+  color:#b8bbcf;
+}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{
+  outline:3px solid #22d3ee;
+  outline-offset:3px;
+}
+button:disabled{
+  color:#d1d5db;
+  opacity:.68;
+}
+@media (prefers-contrast:more){
+  :root{--muted:#d1d5db;--line:rgba(255,255,255,.28)}
+  button.secondary,a.secondary{border-width:2px;background:#16162a}
+}
