@@ -5,7 +5,6 @@ import EventCard from './components/EventCard'
 import Modal from './components/Modal'
 import { dailyQuotes, getDailyQuote } from './data/dailyQuotes'
 import { dateTimeFormatter, friendlyError, numberFormatter, slugify } from './lib/formatters'
-import { getCharacterImage } from './lib/jikan'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 
 const demoEvents = [
@@ -49,19 +48,19 @@ export default function Platform() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch('https://api.jikan.moe/v4/top/anime?limit=8', { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Falha ao carregar temas')))
-      .then(({ data }) => setThemeImages((data || []).map((anime) => ({ title: anime.title, url: anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url })).filter((image) => image.url)))
-      .catch((error) => { if (error.name !== 'AbortError') setThemeImages([]) })
-    return () => controller.abort()
-  }, [])
-
-  useEffect(() => {
-    const controller = new AbortController()
     setCharacterImage('')
-    getCharacterImage(dailyQuote.character, { signal: controller.signal })
-      .then(setCharacterImage)
-      .catch((error) => { if (error.name !== 'AbortError') setCharacterImage('') })
+    fetch(`/api/anime-images?character=${encodeURIComponent(dailyQuote.character)}`, { signal: controller.signal })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Falha ao carregar imagens')))
+      .then((data) => {
+        setThemeImages(Array.isArray(data.themeImages) ? data.themeImages : [])
+        setCharacterImage(data.characterImage || '')
+      })
+      .catch((error) => {
+        if (error.name !== 'AbortError') {
+          setThemeImages([])
+          setCharacterImage('')
+        }
+      })
     return () => controller.abort()
   }, [dailyQuote.character])
 

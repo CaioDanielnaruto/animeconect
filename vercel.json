@@ -1,7 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/health.js": { "maxDuration": 10 }
+    "api/health.js": { "maxDuration": 10 },
+    "api/anime-images.js": { "maxDuration": 10 }
   },
   "crons": [
     { "path": "/api/health", "schedule": "0 6 * * *" }
